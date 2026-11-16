@@ -5,10 +5,11 @@ workflows:
     instance_type: mac_mini_m2
     environment:
       flutter: stable
+      java: 21
     scripts:
       - name: Create the Android project and add our code
         script: |
-          flutter create --org hu --project-name expiry_app --platforms=android build_app
+          flutter create --org hu.gabor --project-name expiry_app --platforms=android build_app
           cp -R app_src/lib/. build_app/lib/
       - name: Add Firebase packages
         script: |
@@ -18,6 +19,14 @@ workflows:
         script: |
           cd build_app
           perl -pi -e 's/minSdk(Version)?(\s*=)?\s*flutter\.minSdkVersion/minSdk = 24/' android/app/build.gradle*
+      - name: Use AGP 9.3.3 so release lint does not crash
+        script: |
+          cd build_app
+          for f in android/settings.gradle android/settings.gradle.kts android/gradle/libs.versions.toml; do
+            [ -f "$f" ] || continue
+            perl -pi -e 's/(com\.android\.application["\)]\s*version\s*")[0-9.]+/${1}9.3.3/' "$f"
+            perl -pi -e 's/^(agp\s*=\s*")[^"]+/${1}9.3.3/' "$f"
+          done
       - name: Build the APK
         script: |
           cd build_app
