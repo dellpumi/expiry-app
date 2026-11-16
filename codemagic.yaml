@@ -9,7 +9,7 @@ workflows:
     scripts:
       - name: Create the Android project and add our code
         script: |
-          flutter create --org hu.gabor --project-name expiry_app --platforms=android build_app
+          flutter create --org hu --project-name expiry_app --platforms=android build_app
           cp -R app_src/lib/. build_app/lib/
       - name: Add Firebase packages
         script: |
