@@ -1,0 +1,26 @@
+workflows:
+  android-apk:
+    name: Android APK
+    max_build_duration: 30
+    instance_type: mac_mini_m2
+    environment:
+      flutter: stable
+    scripts:
+      - name: Create the Android project and add our code
+        script: |
+          flutter create --org hu.gabor --project-name expiry_app --platforms=android build_app
+          cp -R app_src/lib/. build_app/lib/
+      - name: Add Firebase packages
+        script: |
+          cd build_app
+          flutter pub add firebase_core firebase_auth cloud_firestore
+      - name: Set the minimum Android version to 24
+        script: |
+          cd build_app
+          perl -pi -e 's/minSdk(Version)?(\s*=)?\s*flutter\.minSdkVersion/minSdk = 24/' android/app/build.gradle*
+      - name: Build the APK
+        script: |
+          cd build_app
+          flutter build apk --release
+    artifacts:
+      - build_app/build/app/outputs/flutter-apk/*.apk
