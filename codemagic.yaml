@@ -14,7 +14,7 @@ workflows:
       - name: Add Firebase packages
         script: |
           cd build_app
-          flutter pub add firebase_core firebase_auth cloud_firestore
+          flutter pub add firebase_core firebase_auth cloud_firestore connectivity_plus
       - name: Set the minimum Android version to 24
         script: |
           cd build_app

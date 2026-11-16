@@ -2,7 +2,9 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../exit_guard.dart';
 import '../firestore_paths.dart';
+import '../net.dart';
 import '../strings.dart';
 import '../validators.dart';
 
@@ -43,15 +45,18 @@ Future<void> ensureUserDoc(User u) async {
 
 class StartScreen extends StatelessWidget {
   const StartScreen({super.key});
-  void _go(BuildContext c, String m) => Navigator.push(c, MaterialPageRoute(builder: (_) => AuthForm(mode: m)));
+  Future<void> _go(BuildContext c, String m) async {
+    if (!await requireOnline(c) || !c.mounted) return;
+    Navigator.push(c, MaterialPageRoute(builder: (_) => AuthForm(mode: m)));
+  }
   @override
-  Widget build(BuildContext c) => _page('Inventory & Shopping', [
+  Widget build(BuildContext c) => ExitGuard(child: _page('Inventory & Shopping', [
         FilledButton(onPressed: () => _go(c, 'register'), child: const Text('Register')),
         const SizedBox(height: 8),
         OutlinedButton(onPressed: () => _go(c, 'login'), child: const Text('Login')),
         const SizedBox(height: 8),
         OutlinedButton(onPressed: () => _go(c, 'forgot'), child: const Text('Forgotten password')),
-      ], back: false);
+      ], back: false));
 }
 
 class AuthForm extends StatefulWidget {
@@ -103,7 +108,7 @@ class _AuthFormState extends State<AuthForm> {
       if (m == 'register') TextField(controller: _p2, obscureText: true, decoration: const InputDecoration(labelText: 'Confirm password')),
       if (m == 'register') TextField(controller: _n, decoration: const InputDecoration(labelText: 'Your display name')),
       Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(_err, style: const TextStyle(color: Colors.redAccent))),
-      FilledButton(onPressed: _busy ? null : _submit, child: Text(m == 'register' ? 'Register and login' : m == 'login' ? 'Login' : 'Send password recovery link')),
+      FilledButton(onPressed: _busy ? null : _submit, child: Text(_busy ? 'Please wait…' : m == 'register' ? 'Register and login' : m == 'login' ? 'Login' : 'Send password recovery link')),
       OutlinedButton(onPressed: () => Navigator.pop(c), child: const Text('Cancel')),
     ]);
   }
@@ -125,6 +130,7 @@ class _VerifyState extends State<VerifyScreen> {
   void dispose() { _t?.cancel(); super.dispose(); }
 
   Future<void> _check(bool manual) async {
+    if (manual && !await requireOnline(context)) return;
     try {
       await _auth.currentUser?.reload();
       await _auth.currentUser?.getIdToken(true); // rules read email_verified from the token
@@ -133,18 +139,18 @@ class _VerifyState extends State<VerifyScreen> {
   }
 
   Future<void> _resend() async {
-    if (_cd > 0) return;
+    if (_cd > 0 || !await requireOnline(context)) return;
     try { await _auth.currentUser?.sendEmailVerification(); } catch (_) {}
     setState(() => _cd = 60);
     Timer.periodic(const Duration(seconds: 1), (t) { if (!mounted || _cd == 0) { t.cancel(); return; } setState(() => _cd--); });
   }
 
   @override
-  Widget build(BuildContext c) => _page('Verify email', [
+  Widget build(BuildContext c) => ExitGuard(child: _page('Verify email', [
         Text('We sent a verification email to ${_auth.currentUser?.email}. Open the link in it, then come back. Check your spam folder.'),
         Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(_err, style: const TextStyle(color: Colors.redAccent))),
         FilledButton(onPressed: () => _check(true), child: const Text("I've verified")),
         OutlinedButton(onPressed: _cd > 0 ? null : _resend, child: Text(_cd > 0 ? 'Resend email (${_cd}s)' : 'Resend email')),
         OutlinedButton(onPressed: () => askLogout(c), child: const Text('Log out')),
-      ], back: false);
+      ], back: false));
 }

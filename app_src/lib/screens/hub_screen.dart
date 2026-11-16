@@ -1,7 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../exit_guard.dart';
 import '../firestore_paths.dart';
+import '../net.dart';
 import '../strings.dart';
 import '../validators.dart';
 import 'auth_screens.dart';
@@ -22,6 +24,7 @@ class _HubState extends State<HubScreen> {
   void _soon(String what) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$what: next build phase')));
 
   Future<void> _create() async {
+    if (!await requireOnline(context)) return;
     final ctl = TextEditingController();
     final name = await showDialog<String>(
         context: context,
@@ -54,7 +57,7 @@ class _HubState extends State<HubScreen> {
       );
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => ExitGuard(child: Scaffold(
         appBar: AppBar(title: Text('Hello, ${_me.displayName ?? ''}'), actions: [IconButton(icon: const Icon(Icons.settings), onPressed: () => _soon('Settings (S17)'))]),
         body: ListView(padding: const EdgeInsets.all(16), children: [
           FilledButton(onPressed: _create, child: const Text('Create a new list')),
@@ -74,5 +77,5 @@ class _HubState extends State<HubScreen> {
           const SizedBox(height: 40),
           OutlinedButton(onPressed: () => askLogout(context), child: const Text('Log out')),
         ]),
-      );
+      ));
 }
