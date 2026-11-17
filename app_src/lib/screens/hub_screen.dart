@@ -8,6 +8,7 @@ import '../strings.dart';
 import '../validators.dart';
 import 'auth_screens.dart';
 import 'list_screen.dart';
+import 'settings_screen.dart';
 
 class HubScreen extends StatefulWidget {
   const HubScreen({super.key});
@@ -59,7 +60,7 @@ class _HubState extends State<HubScreen> {
 
   @override
   Widget build(BuildContext context) => ExitGuard(child: Scaffold(
-        appBar: AppBar(title: Text('Hello, ${_me.displayName ?? ''}'), actions: [IconButton(icon: const Icon(Icons.settings), onPressed: () => _soon('Settings (S17)'))]),
+        appBar: AppBar(title: Text('Hello, ${_me.displayName ?? ''}'), actions: [IconButton(icon: const Icon(Icons.settings), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())))]),
         body: ListView(padding: const EdgeInsets.all(16), children: [
           FilledButton(onPressed: _create, child: const Text('Create a new list')),
           const SizedBox(height: 16),

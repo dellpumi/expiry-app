@@ -5,6 +5,7 @@ import '../common.dart';
 import '../firestore_paths.dart';
 import '../validators.dart';
 import 'archive_screen.dart';
+import 'settings_screen.dart';
 
 typedef Doc = QueryDocumentSnapshot<Map<String, dynamic>>;
 
@@ -23,11 +24,27 @@ class _ListState extends State<ListScreen> {
   String q = '', iSort = 'exp', sSort = 't';
   bool iAsc = true, sAsc = false;
 
+  @override
+  void initState() { super.initState(); _cleanup(); }
+
+  /// Removes deleted items older than the list's retention days.
+  Future<void> _cleanup() async {
+    try {
+      final l = await db.doc(P.list(widget.listId)).get();
+      final days = (l.data()?['retentionDays'] ?? 14) as int;
+      final old = await col(P.archive).where('deletedAt', isLessThan: Timestamp.fromDate(DateTime.now().subtract(Duration(days: days)))).get();
+      if (old.docs.isEmpty) return;
+      final b = db.batch();
+      for (final d in old.docs) { b.delete(d.reference); }
+      b.commit();
+    } catch (_) {}
+  }
+
   CollectionReference<Map<String, dynamic>> col(String n) => db.collection('${P.list(widget.listId)}/$n');
   void snack(String m, {SnackBarAction? action, int sec = 3}) {
     final s = ScaffoldMessenger.of(context);
     s.clearSnackBars();
-    s.showSnackBar(SnackBar(content: Text(m), action: action, duration: Duration(seconds: sec)));
+    s.showSnackBar(SnackBar(content: Text(m), action: action, persist: false, duration: Duration(seconds: sec)));
   }
 
   Map<String, dynamic> inv(String n, int qn, String d, {Map<String, dynamic>? from}) =>
@@ -43,22 +60,43 @@ class _ListState extends State<ListScreen> {
     col(coll).doc(d.id).update({field: val, ...stampFields()}).catchError(gone);
   }
 
-  WriteBatch toArchive(Doc d, String src, String coll) {
+  WriteBatch toArchive(Doc d, String src, String coll, {int? qty}) {
     final x = d.data(), b = db.batch();
-    b.set(col(P.archive).doc(d.id), {'name': x['name'], 'quantity': x['quantity'], 'expiresOn': x['expiresOn'], 'source': src, 'deletedByUid': me.uid,
+    b.set(qty == null ? col(P.archive).doc(d.id) : col(P.archive).doc(), {'name': x['name'], 'quantity': qty ?? x['quantity'], 'expiresOn': x['expiresOn'], 'source': src, 'deletedByUid': me.uid,
       'deletedByName': me.displayName ?? '?', 'deletedAt': FieldValue.serverTimestamp(), 'shop': x['shop'] ?? '', 'priceFt': x['priceFt'] ?? 0, 'assigneeUid': x['assigneeUid']});
-    b.delete(d.reference);
+    if (qty == null) { b.delete(d.reference); }
     return b;
   }
 
-  void delInv(Doc d) {
+  Future<void> delInv(Doc d) async {
     final x = d.data();
-    toArchive(d, 'inventory', P.inventory).commit();
-    snack('Moved to Deleted / Expired', sec: 5, action: SnackBarAction(label: 'Undo', onPressed: () {
-      final b = db.batch();
-      b.set(col(P.inventory).doc(d.id), {...x, ...stampFields()});
-      b.delete(col(P.archive).doc(d.id));
-      b.commit();
+    final pick = await showDialog<int>(
+        context: context,
+        builder: (k) => AlertDialog(title: const Text('Delete item'), content: Text('${x['name']} – ${x['quantity']} db'), actions: [
+              TextButton(onPressed: () => Navigator.pop(k, 0), child: const Text('Cancel')),
+              FilledButton(onPressed: () => Navigator.pop(k, 1), child: const Text('Delete expired product(s)')),
+              FilledButton(onPressed: () => Navigator.pop(k, 2), child: const Text('Delete and add to the shopping list')),
+            ]));
+    if (pick == null || pick == 0 || !mounted) return;
+    if (pick == 1) { moveOut(d, null, null, 'Moved to Deleted / Expired'); return; }
+    final p = x['priceFt'] ?? 0;
+    final v = await form(context, 'Add to the shopping list',
+        [F('n', 'Name', init: x['name']), F('q', 'Quantity', init: '${x['quantity']}', kind: 'num'), F('s', 'Shop name', init: '${x['shop'] ?? ''}'), F('p', 'Unit price (Ft)', init: p == 0 ? '' : '$p', kind: 'num')],
+        ok: 'Add', check: (m) => checkField('name', m['n']!) ?? checkField('quantity', m['q']!) ?? checkSP(m['s']!, m['p']!));
+    if (v == null) return;
+    moveOut(d, col(P.shopping).doc(), shopDoc(normName(v['n']!), int.parse(v['q']!), v['s']!, v['p']!), 'Moved to the shopping list');
+  }
+
+  void moveOut(Doc d, DocumentReference<Map<String, dynamic>>? shop, Map<String, dynamic>? shopData, String msg) {
+    final x = d.data(), b = toArchive(d, 'inventory', P.inventory);
+    if (shop != null) b.set(shop, shopData!);
+    b.commit();
+    snack(msg, sec: 5, action: SnackBarAction(label: 'Undo', onPressed: () {
+      final u = db.batch();
+      u.set(col(P.inventory).doc(d.id), {...x, ...stampFields()});
+      u.delete(col(P.archive).doc(d.id));
+      if (shop != null) u.delete(shop);
+      u.commit();
     }));
   }
 
@@ -96,7 +134,7 @@ class _ListState extends State<ListScreen> {
         check: (m) { final x = int.tryParse(m['q']!); return x == null || x < 1 || x > qn ? 'Quantity: 1–$qn.' : null; });
     if (v == null) return;
     final x = int.parse(v['q']!);
-    if (x >= qn) { toArchive(d, 'shopping', P.shopping).commit(); } else { d.reference.update({'quantity': qn - x, ...stampFields()}).catchError(gone); }
+    if (x >= qn) { toArchive(d, 'shopping', P.shopping).commit(); } else { final b = toArchive(d, 'shopping', P.shopping, qty: x); b.update(d.reference, {'quantity': qn - x, ...stampFields()}); b.commit(); }
   }
 
   Future<void> buy(Doc d) async {
@@ -127,12 +165,13 @@ class _ListState extends State<ListScreen> {
     }
   }
 
-  Widget head(List<(String, String, int)> cols, String cur, bool asc, void Function(String) tap) => Container(
+  Widget head(List<(String, String, int)> cols, String cur, bool asc, void Function(String) tap, {double lead = 0, double trail = 40}) => Container(
       color: Colors.white10,
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(children: [
+        SizedBox(width: lead),
         for (final c in cols) Expanded(flex: c.$3, child: InkWell(onTap: () => tap(c.$2), child: Text('${c.$1}${cur == c.$2 ? (asc ? ' ▲' : ' ▼') : ''}', style: const TextStyle(fontWeight: FontWeight.bold)))),
-        const SizedBox(width: 40, child: Text('−')),
+        SizedBox(width: trail, child: const Align(alignment: Alignment.centerRight, child: Text('−'))),
       ]));
 
   Widget inventory() => StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
@@ -186,7 +225,7 @@ class _ListState extends State<ListScreen> {
             const TextSpan(text: 'Sum of the product(s) on this list: '),
             TextSpan(text: '${thousands(sum)} Ft', style: const TextStyle(fontWeight: FontWeight.bold)),
           ])))),
-          head([('Name', 'name', 5), ('Quantity', 'q', 2)], sSort, sAsc, (k) => setState(() { if (sSort == k) { sAsc = !sAsc; } else { sSort = k; sAsc = true; } })),
+          head([('Name', 'name', 5), ('Quantity', 'q', 2)], sSort, sAsc, (k) => setState(() { if (sSort == k) { sAsc = !sAsc; } else { sSort = k; sAsc = true; } }), lead: 36, trail: 96),
           Expanded(child: ListView(children: [for (final d in rows) shopRow(d, soon)])),
         ]);
       });
@@ -216,8 +255,8 @@ class _ListState extends State<ListScreen> {
   Widget build(BuildContext c) => Scaffold(
         appBar: AppBar(
             title: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(stream: db.doc(P.list(widget.listId)).snapshots(), builder: (c, s) => Text('${s.data?.data()?['friendlyName'] ?? ''}')),
-            actions: [IconButton(icon: const Icon(Icons.settings), onPressed: () => snack('Settings: next phase'))]),
-        body: Padding(
+            actions: [IconButton(icon: const Icon(Icons.settings), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SettingsScreen(listId: widget.listId))))]),
+        body: SafeArea(child: Padding(
             padding: const EdgeInsets.all(8),
             child: Column(children: [
               SegmentedButton<int>(
@@ -232,6 +271,6 @@ class _ListState extends State<ListScreen> {
               if (find) TextField(autofocus: true, onChanged: (v) => setState(() => q = v), decoration: const InputDecoration(hintText: 'Search…')),
               Expanded(child: tab == 0 ? inventory() : shopping()),
               OutlinedButton(onPressed: () => Navigator.push(c, MaterialPageRoute(builder: (_) => ArchiveScreen(listId: widget.listId))), child: const Text('Deleted / Expired products')),
-            ])),
+            ]))),
       );
 }

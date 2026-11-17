@@ -33,7 +33,11 @@ Future<void> askLogout(BuildContext c) async {
             TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
             FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Log out')),
           ]));
-  if (ok == true) await _auth.signOut();
+  if (ok == true) {
+    final nav = Navigator.of(c);
+    await _auth.signOut();
+    nav.popUntil((r) => r.isFirst);
+  }
 }
 
 /// Creates users/{uid} if missing (spec §5 ensureUserDoc).
