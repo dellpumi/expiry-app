@@ -12,6 +12,7 @@ service cloud.firestore {
     function isOwner(l) { return verified() && get(listPath(l)).data.ownerUid == request.auth.uid; }
     function isStr(v, mn, mx) { return v is string && v.size() >= mn && v.size() <= mx; }
     function isDateText(v) { return v is string && v.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'); }
+    function validSP(d) { return (!('shop' in d) || isStr(d.shop, 0, 40)) && (!('priceFt' in d) || d.priceFt == null || (d.priceFt is int && d.priceFt >= 0 && d.priceFt <= 9999999)); }
 
     match /users/{uid} {
       allow read, delete: if signedIn() && request.auth.uid == uid;
@@ -97,9 +98,9 @@ service cloud.firestore {
       }
 
       function validInventory(d) {
-        return d.keys().hasOnly(['name','quantity','expiresOn','createdAt','createdByUid','updatedAt','updatedByUid'])
+        return d.keys().hasOnly(['name','quantity','expiresOn','createdAt','createdByUid','updatedAt','updatedByUid','shop','priceFt','assigneeUid'])
           && d.keys().hasAll(['name','quantity','expiresOn','createdAt','createdByUid','updatedAt','updatedByUid'])
-          && isStr(d.name, 1, 80)
+          && isStr(d.name, 1, 80) && validSP(d)
           && d.quantity is int && d.quantity >= -99 && d.quantity <= 999
           && isDateText(d.expiresOn)
           && d.createdAt is timestamp && d.createdByUid is string
@@ -116,7 +117,7 @@ service cloud.firestore {
         return d.keys().hasOnly(['name','quantity','assigneeUid','createdAt','createdByUid','updatedAt','updatedByUid',
                                  'shop','priceFt','gtin','shoppyProductId','packageSize'])
           && d.keys().hasAll(['name','quantity','assigneeUid','createdAt','createdByUid','updatedAt','updatedByUid'])
-          && isStr(d.name, 1, 80)
+          && isStr(d.name, 1, 80) && validSP(d)
           && d.quantity is int && d.quantity >= -99 && d.quantity <= 999
           && (d.assigneeUid == null
               || (d.assigneeUid is string && exists(memberPath(listId, d.assigneeUid))))
@@ -132,9 +133,9 @@ service cloud.firestore {
       }
 
       function validArchive(d) {
-        return d.keys().hasOnly(['name','quantity','expiresOn','source','deletedByUid','deletedByName','deletedAt'])
+        return d.keys().hasOnly(['name','quantity','expiresOn','source','deletedByUid','deletedByName','deletedAt','shop','priceFt','assigneeUid'])
           && d.keys().hasAll(['name','quantity','expiresOn','source','deletedByUid','deletedByName','deletedAt'])
-          && isStr(d.name, 1, 80)
+          && isStr(d.name, 1, 80) && validSP(d)
           && d.quantity is int && d.quantity >= 1 && d.quantity <= 999
           && (d.expiresOn == null || isDateText(d.expiresOn))
           && (d.source == 'inventory' || d.source == 'shopping')
