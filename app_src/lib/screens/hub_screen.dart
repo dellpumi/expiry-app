@@ -7,6 +7,7 @@ import '../net.dart';
 import '../strings.dart';
 import '../validators.dart';
 import 'auth_screens.dart';
+import 'list_screen.dart';
 
 class HubScreen extends StatefulWidget {
   const HubScreen({super.key});
@@ -42,7 +43,7 @@ class _HubState extends State<HubScreen> {
     b.set(ref, {'friendlyName': name, 'ownerUid': _me.uid, 'sharingEnabled': false, 'retentionDays': 14, 'createdAt': FieldValue.serverTimestamp(), 'updatedAt': FieldValue.serverTimestamp()});
     b.set(ref.collection(P.members).doc(_me.uid), {'uid': _me.uid, 'listId': ref.id, 'role': 'owner', 'displayName': _me.displayName ?? '', 'email': _me.email!.toLowerCase(), 'joinedAt': FieldValue.serverTimestamp()});
     await b.commit();
-    _soon('Open the new list (S8)');
+    if (mounted) Navigator.push(context, MaterialPageRoute(builder: (_) => ListScreen(listId: ref.id)));
   }
 
   Widget _col(String title, List<QueryDocumentSnapshot<Map<String, dynamic>>> rows) => Expanded(
@@ -51,7 +52,7 @@ class _HubState extends State<HubScreen> {
           for (final r in rows)
             StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
               stream: _db.doc(P.list(r.data()['listId'] as String)).snapshots(),
-              builder: (c, s) => s.data?.data() == null ? const SizedBox() : Card(child: ListTile(title: Text(s.data!.data()!['friendlyName'] as String), onTap: () => _soon('List screen (S8)'))),
+              builder: (c, s) => s.data?.data() == null ? const SizedBox() : Card(child: ListTile(title: Text(s.data!.data()!['friendlyName'] as String), onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => ListScreen(listId: r.data()['listId'] as String))))),
             ),
         ]),
       );
