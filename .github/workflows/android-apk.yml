@@ -28,9 +28,9 @@ jobs:
           flutter create --org hu --project-name expiry_app --platforms=android build_app
           cp -R app_src/lib/. build_app/lib/
 
-      - name: Add Firebase packages
+      - name: Add Firebase and other packages
         working-directory: build_app
-        run: flutter pub add firebase_core firebase_auth cloud_firestore
+        run: flutter pub add firebase_core firebase_auth cloud_firestore connectivity_plus
 
       - name: Set the minimum Android version to 24
         working-directory: build_app
