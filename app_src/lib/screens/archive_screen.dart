@@ -6,9 +6,17 @@ import '../validators.dart';
 
 typedef _Doc = QueryDocumentSnapshot<Map<String, dynamic>>;
 
-class ArchiveScreen extends StatelessWidget {
+class ArchiveScreen extends StatefulWidget {
   final String listId;
   const ArchiveScreen({super.key, required this.listId});
+  @override
+  State<ArchiveScreen> createState() => _ArcState();
+}
+
+class _ArcState extends State<ArchiveScreen> {
+  String get listId => widget.listId;
+  bool find = false;
+  String q = '';
 
   Future<void> _restore(BuildContext c, _Doc d) async {
     final db = FirebaseFirestore.instance, base = P.list(listId), x = d.data();
@@ -43,20 +51,31 @@ class ArchiveScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext c) => Scaffold(
-        appBar: AppBar(title: const Text('Deleted / Expired')),
-        body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: FirebaseFirestore.instance.collection('${P.list(listId)}/archive').snapshots(),
-            builder: (c, s) {
-              final rows = (s.data?.docs ?? []).toList();
-              rows.sort((a, b) => '${b.data()['expiresOn'] ?? ''}'.compareTo('${a.data()['expiresOn'] ?? ''}'));
-              return ListView(children: [
-                for (final d in rows)
-                  ListTile(
-                    title: Text('${d['name']}  ·  ${d['quantity']} db'),
-                    subtitle: Text('${d.data()['expiresOn'] == null ? '' : '${showDate(d['expiresOn'])}  ·  '}Deleted by ${d['deletedByName']}'),
-                    trailing: IconButton(icon: const Icon(Icons.add), onPressed: () => _restore(c, d)),
-                  ),
-              ]);
-            }),
+        appBar: AppBar(title: const Text('Deleted / Expired'), actions: [IconButton(icon: const Icon(Icons.search), onPressed: () => setState(() { find = !find; q = ''; }))]),
+        body: SafeArea(
+            child: Column(children: [
+          if (find) Padding(padding: const EdgeInsets.all(8), child: TextField(autofocus: true, onChanged: (v) => setState(() => q = v), decoration: const InputDecoration(hintText: 'Search…'))),
+          Expanded(
+              child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  stream: FirebaseFirestore.instance.collection('${P.list(listId)}/members').snapshots(),
+                  builder: (c, ms) {
+                    // current names by uid: a renamed person shows with the new name on old rows too
+                    final names = {for (final m in ms.data?.docs ?? <QueryDocumentSnapshot<Map<String, dynamic>>>[]) '${m.data()['uid']}': '${m.data()['displayName']}'};
+                    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                        stream: FirebaseFirestore.instance.collection('${P.list(listId)}/archive').snapshots(),
+                        builder: (c, s) {
+                          final rows = (s.data?.docs ?? []).where((d) => fold('${d['name']}').contains(fold(q))).toList();
+                          rows.sort((a, b) => '${b.data()['expiresOn'] ?? ''}'.compareTo('${a.data()['expiresOn'] ?? ''}'));
+                          return ListView(children: [
+                            for (final d in rows)
+                              ListTile(
+                                title: Text('${d['name']}  ·  ${d['quantity']} db'),
+                                subtitle: Text('${d.data()['expiresOn'] == null ? '' : 'Exp. date: ${showDate(d['expiresOn'])}  ·  '}Deleted by ${names[d['deletedByUid']] ?? d['deletedByName']}'),
+                                trailing: IconButton(icon: const Icon(Icons.add), onPressed: () => _restore(c, d)),
+                              ),
+                          ]);
+                        });
+                  })),
+        ])),
       );
 }

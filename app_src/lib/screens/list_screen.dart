@@ -60,9 +60,9 @@ class _ListState extends State<ListScreen> {
     col(coll).doc(d.id).update({field: val, ...stampFields()}).catchError(gone);
   }
 
-  WriteBatch toArchive(Doc d, String src, String coll, {int? qty}) {
+  WriteBatch toArchive(Doc d, String src, String coll, {int? qty, DocumentReference<Map<String, dynamic>>? ref}) {
     final x = d.data(), b = db.batch();
-    b.set(qty == null ? col(P.archive).doc(d.id) : col(P.archive).doc(), {'name': x['name'], 'quantity': qty ?? x['quantity'], 'expiresOn': x['expiresOn'], 'source': src, 'deletedByUid': me.uid,
+    b.set(ref ?? (qty == null ? col(P.archive).doc(d.id) : col(P.archive).doc()), {'name': x['name'], 'quantity': qty ?? x['quantity'], 'expiresOn': x['expiresOn'], 'source': src, 'deletedByUid': me.uid,
       'deletedByName': me.displayName ?? '?', 'deletedAt': FieldValue.serverTimestamp(), 'shop': x['shop'] ?? '', 'priceFt': x['priceFt'] ?? 0, 'assigneeUid': x['assigneeUid']});
     if (qty == null) { b.delete(d.reference); }
     return b;
@@ -133,8 +133,18 @@ class _ListState extends State<ListScreen> {
     final v = await form(context, 'Delete this item?', [F('q', 'Quantity', init: '$qn', kind: 'num')], ok: 'Delete', text: d['name'],
         check: (m) { final x = int.tryParse(m['q']!); return x == null || x < 1 || x > qn ? 'Quantity: 1–$qn.' : null; });
     if (v == null) return;
-    final x = int.parse(v['q']!);
-    if (x >= qn) { toArchive(d, 'shopping', P.shopping).commit(); } else { final b = toArchive(d, 'shopping', P.shopping, qty: x); b.update(d.reference, {'quantity': qn - x, ...stampFields()}); b.commit(); }
+    final x = int.parse(v['q']!), data = d.data();
+    void Function() undo;
+    if (x >= qn) {
+      toArchive(d, 'shopping', P.shopping).commit();
+      undo = () { final u = db.batch(); u.set(col(P.shopping).doc(d.id), {...data, ...stampFields()}); u.delete(col(P.archive).doc(d.id)); u.commit(); };
+    } else {
+      final ar = col(P.archive).doc(), b = toArchive(d, 'shopping', P.shopping, qty: x, ref: ar);
+      b.update(d.reference, {'quantity': qn - x, ...stampFields()});
+      b.commit();
+      undo = () { final u = db.batch(); u.update(d.reference, {'quantity': qn, ...stampFields()}); u.delete(ar); u.commit(); };
+    }
+    snack('Removed from the shopping list', sec: 5, action: SnackBarAction(label: 'Undo', onPressed: undo));
   }
 
   Future<void> buy(Doc d) async {
@@ -150,6 +160,7 @@ class _ListState extends State<ListScreen> {
       b.set(col(P.inventory).doc(), inv(n, mv, parseDate(v['d']!)!, from: src));
       if (mv == qn) { b.delete(d.reference); } else { b.update(d.reference, {'quantity': qn - mv, ...stampFields()}); }
       b.commit();
+      snack('Moved to the inventory list');
       return;
     }
     var left = qn;
@@ -163,14 +174,17 @@ class _ListState extends State<ListScreen> {
       if (left <= 0) { b.delete(d.reference); } else { b.update(d.reference, {'quantity': left, ...stampFields()}); }
       b.commit();
     }
+    if (mounted) snack('Moved to the inventory list');
   }
 
-  Widget head(List<(String, String, int)> cols, String cur, bool asc, void Function(String) tap, {double lead = 0, double trail = 40}) => Container(
+  Widget pc(int flex, Widget w) => Expanded(flex: flex, child: Padding(padding: const EdgeInsets.only(right: 8), child: w));
+
+  Widget head(List<(String, String, int)> cols, String cur, bool asc, void Function(String) tap, {double lead = 0, double trail = 48}) => Container(
       color: Colors.white10,
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(children: [
         SizedBox(width: lead),
-        for (final c in cols) Expanded(flex: c.$3, child: InkWell(onTap: () => tap(c.$2), child: Text('${c.$1}${cur == c.$2 ? (asc ? ' ▲' : ' ▼') : ''}', style: const TextStyle(fontWeight: FontWeight.bold)))),
+        for (final c in cols) pc(c.$3, InkWell(onTap: () => tap(c.$2), child: Text('${c.$1}${cur == c.$2 ? (asc ? ' ▲' : ' ▼') : ''}', style: const TextStyle(fontWeight: FontWeight.bold)))),
         SizedBox(width: trail, child: const Align(alignment: Alignment.centerRight, child: Text('−'))),
       ]));
 
@@ -195,10 +209,10 @@ class _ListState extends State<ListScreen> {
         color: left <= 0 ? const Color(0xFF6B1E1E) : left <= 3 ? const Color(0xFF5A4E00) : null,
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(children: [
-          Expanded(flex: 5, child: InkWell(onTap: () => edit(P.inventory, d, 'name', 'Name'), child: Text('${left <= 0 ? '⛔ ' : left <= 3 ? '⚠ ' : ''}${d['name']}'))),
-          Expanded(flex: 2, child: InkWell(onTap: () => edit(P.inventory, d, 'quantity', 'Quantity', kind: 'num'), child: Text('${d['quantity']} db'))),
-          Expanded(flex: 3, child: InkWell(onTap: () => edit(P.inventory, d, 'expiresOn', 'Expiration date', kind: 'date'), child: Text(showDate(d['expiresOn'])))),
-          SizedBox(width: 40, child: IconButton(icon: const Icon(Icons.remove), onPressed: () => delInv(d))),
+          pc(5, InkWell(onTap: () => edit(P.inventory, d, 'name', 'Name'), child: Text('${left <= 0 ? '⛔ ' : left <= 3 ? '⚠ ' : ''}${d['name']}'))),
+          pc(2, InkWell(onTap: () => edit(P.inventory, d, 'quantity', 'Quantity', kind: 'num'), child: Text('${d['quantity']} db'))),
+          pc(3, InkWell(onTap: () => edit(P.inventory, d, 'expiresOn', 'Expiration date', kind: 'date'), child: Text(showDate(d['expiresOn'])))),
+          SizedBox(width: 48, child: IconButton(icon: const Icon(Icons.remove), onPressed: () => delInv(d))),
         ]));
   }
 
@@ -225,7 +239,7 @@ class _ListState extends State<ListScreen> {
             const TextSpan(text: 'Sum of the product(s) on this list: '),
             TextSpan(text: '${thousands(sum)} Ft', style: const TextStyle(fontWeight: FontWeight.bold)),
           ])))),
-          head([('Name', 'name', 5), ('Quantity', 'q', 2)], sSort, sAsc, (k) => setState(() { if (sSort == k) { sAsc = !sAsc; } else { sSort = k; sAsc = true; } }), lead: 36, trail: 96),
+          head([('Name', 'name', 5), ('Quantity', 'q', 2)], sSort, sAsc, (k) => setState(() { if (sSort == k) { sAsc = !sAsc; } else { sSort = k; sAsc = true; } }), lead: 36, trail: 104),
           Expanded(child: ListView(children: [for (final d in rows) shopRow(d, soon)])),
         ]);
       });
@@ -238,15 +252,15 @@ class _ListState extends State<ListScreen> {
         child: Column(children: [
           Row(children: [
             SizedBox(width: 36, child: Checkbox(value: false, onChanged: (_) => buy(d))),
-            Expanded(flex: 5, child: InkWell(onTap: () => edit(P.shopping, d, 'name', 'Name'), child: Text('${d['name']}'))),
-            Expanded(flex: 2, child: InkWell(onTap: () => edit(P.shopping, d, 'quantity', 'Quantity', kind: 'num'), child: Text('${d['quantity']} db'))),
-            SizedBox(width: 96, child: Align(alignment: Alignment.centerRight, child: IconButton(icon: const Icon(Icons.remove), onPressed: () => delShop(d)))),
+            pc(5, InkWell(onTap: () => edit(P.shopping, d, 'name', 'Name'), child: Text('${d['name']}'))),
+            pc(2, InkWell(onTap: () => edit(P.shopping, d, 'quantity', 'Quantity', kind: 'num'), child: Text('${d['quantity']} db'))),
+            SizedBox(width: 104, child: Align(alignment: Alignment.centerRight, child: IconButton(icon: const Icon(Icons.remove), onPressed: () => delShop(d)))),
           ]),
           Row(children: [
             const SizedBox(width: 36),
-            Expanded(flex: 5, child: InkWell(onTap: () => editSP(d), child: Text(shop.isEmpty ? '–' : shop))),
-            Expanded(flex: 2, child: InkWell(onTap: () => editSP(d), child: Text(p > 0 ? '${thousands(p)} Ft' : '–'))),
-            SizedBox(width: 96, child: Align(alignment: Alignment.centerRight, child: OutlinedButton(onPressed: soon, child: const Text('Check price')))),
+            pc(5, InkWell(onTap: () => editSP(d), child: Text(shop.isEmpty ? '–' : shop))),
+            pc(2, InkWell(onTap: () => editSP(d), child: Text(p > 0 ? '${thousands(p)} Ft' : '–'))),
+            SizedBox(width: 104, child: Align(alignment: Alignment.centerRight, child: OutlinedButton(onPressed: soon, child: const Text('Check price')))),
           ]),
         ]));
   }
@@ -257,7 +271,7 @@ class _ListState extends State<ListScreen> {
             title: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(stream: db.doc(P.list(widget.listId)).snapshots(), builder: (c, s) => Text('${s.data?.data()?['friendlyName'] ?? ''}')),
             actions: [IconButton(icon: const Icon(Icons.settings), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SettingsScreen(listId: widget.listId))))]),
         body: SafeArea(child: Padding(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Column(children: [
               SegmentedButton<int>(
                   segments: const [ButtonSegment(value: 0, label: Text('Inventory list')), ButtonSegment(value: 1, label: Text('Shopping list'))],

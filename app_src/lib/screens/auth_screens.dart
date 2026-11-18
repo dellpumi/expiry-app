@@ -73,7 +73,7 @@ class AuthForm extends StatefulWidget {
 class _AuthFormState extends State<AuthForm> {
   final _e = TextEditingController(), _p = TextEditingController(), _p2 = TextEditingController(), _n = TextEditingController();
   String _err = '';
-  bool _busy = false;
+  bool _busy = false, _show = false;
 
   Future<void> _submit() async {
     final m = widget.mode, e = _e.text.trim().toLowerCase(), p = _p.text, n = normName(_n.text);
@@ -108,8 +108,8 @@ class _AuthFormState extends State<AuthForm> {
     final m = widget.mode;
     return _page(m == 'register' ? 'Register' : m == 'login' ? 'Login' : 'Forgotten password', [
       TextField(controller: _e, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'E-mail address')),
-      if (m != 'forgot') TextField(controller: _p, obscureText: true, decoration: const InputDecoration(labelText: 'Password')),
-      if (m == 'register') TextField(controller: _p2, obscureText: true, decoration: const InputDecoration(labelText: 'Confirm password')),
+      if (m != 'forgot') TextField(controller: _p, obscureText: !_show, decoration: InputDecoration(labelText: 'Password', suffixIcon: IconButton(icon: Icon(_show ? Icons.visibility_off : Icons.visibility), onPressed: () => setState(() => _show = !_show)))),
+      if (m == 'register') TextField(controller: _p2, obscureText: !_show, decoration: const InputDecoration(labelText: 'Confirm password')),
       if (m == 'register') TextField(controller: _n, decoration: const InputDecoration(labelText: 'Your display name')),
       Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(_err, style: const TextStyle(color: Colors.redAccent))),
       FilledButton(onPressed: _busy ? null : _submit, child: Text(_busy ? 'Please wait…' : m == 'register' ? 'Register and login' : m == 'login' ? 'Login' : 'Send password recovery link')),
