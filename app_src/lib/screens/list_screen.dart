@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../common.dart';
 import '../firestore_paths.dart';
 import '../validators.dart';
+import 'dart:async';
 import 'archive_screen.dart';
 import 'settings_screen.dart';
 
@@ -24,8 +25,30 @@ class _ListState extends State<ListScreen> {
   String q = '', iSort = 'exp', sSort = 't';
   bool iAsc = true, sAsc = false;
 
+  Map<String, String> members = {};
+  StreamSubscription? _sub;
+  bool get multi => members.length > 1;
+
   @override
-  void initState() { super.initState(); _cleanup(); }
+  void initState() {
+    super.initState();
+    _cleanup();
+    _sub = col('members').snapshots().listen((s) => setState(() => members = {for (final m in s.docs) m.id: '${m.data()['displayName']}'}), onError: (_) {});
+  }
+
+  @override
+  void dispose() { _sub?.cancel(); super.dispose(); }
+
+  Future<void> edWho(Doc d) async {
+    final pick = await showDialog<String>(
+        context: context,
+        builder: (k) => SimpleDialog(title: const Text('Who buys it'), children: [
+              SimpleDialogOption(onPressed: () => Navigator.pop(k, ''), child: const Text('Anyone')),
+              for (final e in members.entries) SimpleDialogOption(onPressed: () => Navigator.pop(k, e.key), child: Text(e.value)),
+            ]));
+    if (pick == null) return;
+    d.reference.update({'assigneeUid': pick.isEmpty ? null : pick, ...stampFields()}).catchError(gone);
+  }
 
   /// Removes deleted items older than the list's retention days.
   Future<void> _cleanup() async {
@@ -84,7 +107,7 @@ class _ListState extends State<ListScreen> {
         [F('n', 'Name', init: x['name']), F('q', 'Quantity', init: '${x['quantity']}', kind: 'num'), F('s', 'Shop name', init: '${x['shop'] ?? ''}'), F('p', 'Unit price (Ft)', init: p == 0 ? '' : '$p', kind: 'num')],
         ok: 'Add', check: (m) => checkField('name', m['n']!) ?? checkField('quantity', m['q']!) ?? checkSP(m['s']!, m['p']!));
     if (v == null) return;
-    moveOut(d, col(P.shopping).doc(), shopDoc(normName(v['n']!), int.parse(v['q']!), v['s']!, v['p']!), 'Moved to the shopping list');
+    moveOut(d, col(P.shopping).doc(), shopDoc(normName(v['n']!), int.parse(v['q']!), v['s']!, v['p']!), 'Expired trashed, new product(s) moved to the shopping list');
   }
 
   void moveOut(Doc d, DocumentReference<Map<String, dynamic>>? shop, Map<String, dynamic>? shopData, String msg) {
@@ -225,7 +248,7 @@ class _ListState extends State<ListScreen> {
         final rows = all.where((d) => fold(d['name']).contains(fold(q))).toList();
         int t(Doc d) => (d.data()['createdAt'] as Timestamp?)?.millisecondsSinceEpoch ?? DateTime.now().millisecondsSinceEpoch;
         rows.sort((a, b) {
-          final k = sSort == 'name' ? fold(a['name']).compareTo(fold(b['name'])) : sSort == 'q' ? (a['quantity'] as int).compareTo(b['quantity'] as int) : t(a).compareTo(t(b));
+          final k = sSort == 'name' ? fold(a['name']).compareTo(fold(b['name'])) : sSort == 'q' ? (a['quantity'] as int).compareTo(b['quantity'] as int) : sSort == 'who' ? '${members[a.data()['assigneeUid']] ?? ''}'.compareTo('${members[b.data()['assigneeUid']] ?? ''}') : t(a).compareTo(t(b));
           return sAsc ? k : -k;
         });
         void soon() => snack('Coming later');
@@ -239,7 +262,7 @@ class _ListState extends State<ListScreen> {
             const TextSpan(text: 'Sum of the product(s) on this list: '),
             TextSpan(text: '${thousands(sum)} Ft', style: const TextStyle(fontWeight: FontWeight.bold)),
           ])))),
-          head([('Name', 'name', 5), ('Quantity', 'q', 2)], sSort, sAsc, (k) => setState(() { if (sSort == k) { sAsc = !sAsc; } else { sSort = k; sAsc = true; } }), lead: 36, trail: 104),
+          head([('Name', 'name', 5), ('Quantity', 'q', 2), if (multi) ('Who', 'who', 3)], sSort, sAsc, (k) => setState(() { if (sSort == k) { sAsc = !sAsc; } else { sSort = k; sAsc = true; } }), lead: 36, trail: 104),
           Expanded(child: ListView(children: [for (final d in rows) shopRow(d, soon)])),
         ]);
       });
@@ -254,12 +277,14 @@ class _ListState extends State<ListScreen> {
             SizedBox(width: 36, child: Checkbox(value: false, onChanged: (_) => buy(d))),
             pc(5, InkWell(onTap: () => edit(P.shopping, d, 'name', 'Name'), child: Text('${d['name']}'))),
             pc(2, InkWell(onTap: () => edit(P.shopping, d, 'quantity', 'Quantity', kind: 'num'), child: Text('${d['quantity']} db'))),
+            if (multi) pc(3, InkWell(onTap: () => edWho(d), child: Text(members['${d.data()['assigneeUid']}'] ?? 'Anyone'))),
             SizedBox(width: 104, child: Align(alignment: Alignment.centerRight, child: IconButton(icon: const Icon(Icons.remove), onPressed: () => delShop(d)))),
           ]),
           Row(children: [
             const SizedBox(width: 36),
             pc(5, InkWell(onTap: () => editSP(d), child: Text(shop.isEmpty ? '–' : shop))),
             pc(2, InkWell(onTap: () => editSP(d), child: Text(p > 0 ? '${thousands(p)} Ft' : '–'))),
+            if (multi) const Spacer(flex: 3),
             SizedBox(width: 104, child: Align(alignment: Alignment.centerRight, child: OutlinedButton(onPressed: soon, child: const Text('Check price')))),
           ]),
         ]));

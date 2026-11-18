@@ -47,6 +47,35 @@ class _HubState extends State<HubScreen> {
     if (mounted) Navigator.push(context, MaterialPageRoute(builder: (_) => ListScreen(listId: ref.id)));
   }
 
+  Widget _invites() => StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: _db.collectionGroup(P.invites).where('email', isEqualTo: _me.email!.toLowerCase()).snapshots(),
+      builder: (c, s) {
+        final rows = (s.data?.docs ?? []).where((d) => (d.data()['expiresAt'] as Timestamp).toDate().isAfter(DateTime.now())).toList();
+        return Column(children: [
+          for (final d in rows)
+            Card(
+                child: ListTile(
+                    title: Text('${d.data()['listName']}'),
+                    subtitle: Text('Invitation from ${d.data()['ownerName']}'),
+                    trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                      TextButton(onPressed: () => _answer(d, false), child: const Text('Decline')),
+                      FilledButton(onPressed: () => _answer(d, true), child: const Text('Accept')),
+                    ]))),
+        ]);
+      });
+
+  Future<void> _answer(QueryDocumentSnapshot<Map<String, dynamic>> d, bool yes) async {
+    if (!await requireOnline(context)) return;
+    final b = _db.batch(), x = d.data();
+    if (yes) {
+      b.set(_db.doc(P.member(x['listId'], _me.uid)), {'uid': _me.uid, 'listId': x['listId'], 'role': 'editor', 'displayName': _me.displayName ?? '?', 'email': _me.email!.toLowerCase(), 'joinedAt': FieldValue.serverTimestamp()});
+    }
+    b.delete(d.reference);
+    try { await b.commit(); } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('This invitation is no longer valid.'), persist: false));
+    }
+  }
+
   Widget _col(String title, List<QueryDocumentSnapshot<Map<String, dynamic>>> rows) => Expanded(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -63,6 +92,7 @@ class _HubState extends State<HubScreen> {
         appBar: AppBar(title: Text('Hello, ${_me.displayName ?? ''}'), actions: [IconButton(icon: const Icon(Icons.settings), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())))]),
         body: ListView(padding: const EdgeInsets.all(16), children: [
           FilledButton(onPressed: _create, child: const Text('Create a new list')),
+          _invites(),
           const SizedBox(height: 16),
           const Text('Open a list for editing', style: TextStyle(fontSize: 18)),
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(

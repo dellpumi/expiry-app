@@ -109,7 +109,7 @@ class _AuthFormState extends State<AuthForm> {
     return _page(m == 'register' ? 'Register' : m == 'login' ? 'Login' : 'Forgotten password', [
       TextField(controller: _e, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'E-mail address')),
       if (m != 'forgot') TextField(controller: _p, obscureText: !_show, decoration: InputDecoration(labelText: 'Password', suffixIcon: IconButton(icon: Icon(_show ? Icons.visibility_off : Icons.visibility), onPressed: () => setState(() => _show = !_show)))),
-      if (m == 'register') TextField(controller: _p2, obscureText: !_show, decoration: const InputDecoration(labelText: 'Confirm password')),
+      if (m == 'register') TextField(controller: _p2, obscureText: !_show, decoration: InputDecoration(labelText: 'Confirm password', suffixIcon: IconButton(icon: Icon(_show ? Icons.visibility_off : Icons.visibility), onPressed: () => setState(() => _show = !_show)))),
       if (m == 'register') TextField(controller: _n, decoration: const InputDecoration(labelText: 'Your display name')),
       Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(_err, style: const TextStyle(color: Colors.redAccent))),
       FilledButton(onPressed: _busy ? null : _submit, child: Text(_busy ? 'Please wait…' : m == 'register' ? 'Register and login' : m == 'login' ? 'Login' : 'Send password recovery link')),
