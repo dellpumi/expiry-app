@@ -59,6 +59,7 @@ Future<Map<String, String>?> form(BuildContext c, String title, List<F> fs,
     Future<void> Function(Map<String, String>)? onSave, Map<String, String> clear = const {}}) {
   final ctl = {for (final f in fs) f.id: TextEditingController(text: f.init)};
   final chk = {for (final f in fs) f.id: f.init == '1'};
+  final shown = <String>{};
   var err = '';
   return showDialog<Map<String, String>>(
       context: c,
@@ -74,8 +75,8 @@ Future<Map<String, String>?> form(BuildContext c, String title, List<F> fs,
                       ? CheckboxListTile(contentPadding: EdgeInsets.zero, title: Text(f.label), value: chk[f.id], onChanged: (v) => set(() => chk[f.id] = v!))
                       : TextField(
                           controller: ctl[f.id],
-                          decoration: InputDecoration(labelText: f.label),
-                          obscureText: f.kind == 'pw',
+                          decoration: InputDecoration(labelText: f.label, suffixIcon: f.kind == 'pw' ? IconButton(icon: Icon(shown.contains(f.id) ? Icons.visibility_off : Icons.visibility), onPressed: () => set(() { shown.contains(f.id) ? shown.remove(f.id) : shown.add(f.id); })) : null),
+                          obscureText: f.kind == 'pw' && !shown.contains(f.id),
                           keyboardType: f.kind == 'text' || f.kind == 'pw' ? null : TextInputType.number,
                           inputFormatters: f.kind == 'date' ? [DateMask()] : f.kind == 'num' ? [FilteringTextInputFormatter.digitsOnly] : null),
                 if (err.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 8), child: Text(err, style: const TextStyle(color: Colors.redAccent))),

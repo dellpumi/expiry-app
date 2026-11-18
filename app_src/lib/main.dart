@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -14,14 +15,48 @@ Future<void> main() async {
   runApp(const App());
 }
 
+final navKey = GlobalKey<NavigatorState>();
+
 class App extends StatelessWidget {
   const App({super.key});
   @override
   Widget build(BuildContext context) => MaterialApp(
         title: 'Inventory & Shopping',
         theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2E5E3A), brightness: Brightness.dark), useMaterial3: true),
-        home: const Gate(),
+        navigatorKey: navKey,
+        home: const SessionWatcher(child: Gate()),
       );
+}
+
+/// Logs this device out when the password was changed or the account was deleted on another device.
+class SessionWatcher extends StatefulWidget {
+  final Widget child;
+  const SessionWatcher({super.key, required this.child});
+  @override
+  State<SessionWatcher> createState() => _SwState();
+}
+
+class _SwState extends State<SessionWatcher> with WidgetsBindingObserver {
+  Timer? _t;
+  @override
+  void initState() { super.initState(); WidgetsBinding.instance.addObserver(this); _t = Timer.periodic(const Duration(minutes: 2), (_) => _check()); }
+  @override
+  void dispose() { _t?.cancel(); WidgetsBinding.instance.removeObserver(this); super.dispose(); }
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState s) { if (s == AppLifecycleState.resumed) _check(); }
+  Future<void> _check() async {
+    final u = FirebaseAuth.instance.currentUser;
+    if (u == null) return;
+    try { await u.reload(); await u.getIdToken(true); }
+    on FirebaseAuthException catch (e) {
+      if (const ['user-token-expired', 'user-not-found', 'user-disabled', 'invalid-user-token'].contains(e.code)) {
+        await FirebaseAuth.instance.signOut();
+        navKey.currentState?.popUntil((r) => r.isFirst);
+      }
+    } catch (_) {}
+  }
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 /// Decides the screen from the auth state: S1 / S5 / S6.
