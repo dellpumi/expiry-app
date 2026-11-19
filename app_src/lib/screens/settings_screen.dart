@@ -120,6 +120,7 @@ class _SetState extends State<SettingsScreen> {
       final ms = await db.collectionGroup(P.members).where('uid', isEqualTo: me.uid).get();
       for (final m in ms.docs) { if (m.data()['role'] == 'owner') { await wipeList(m.data()['listId']); } else { await m.reference.delete(); } }
       await db.doc(P.user(me.uid)).delete();
+      try { await db.doc('userEmails/${me.email!.toLowerCase()}').delete(); } catch (_) {}
       await me.delete();
       nav.popUntil((r) => r.isFirst);
     } on FirebaseAuthException { snack('Wrong password.'); } catch (_) { snack(S.generic); }

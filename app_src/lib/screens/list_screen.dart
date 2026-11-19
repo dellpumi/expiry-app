@@ -3,8 +3,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../common.dart';
 import '../firestore_paths.dart';
+import '../net.dart';
 import '../validators.dart';
 import 'dart:async';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'archive_screen.dart';
 import 'settings_screen.dart';
 
@@ -26,7 +28,10 @@ class _ListState extends State<ListScreen> {
   bool iAsc = true, sAsc = false;
 
   Map<String, String> members = {};
-  StreamSubscription? _sub;
+  StreamSubscription? _sub, _sync, _net;
+  Timer? _tm;
+  DateTime? lastSync;
+  bool pending = false, offline = false;
   bool get multi => members.length > 1;
 
   @override
@@ -34,10 +39,31 @@ class _ListState extends State<ListScreen> {
     super.initState();
     _cleanup();
     _sub = col('members').snapshots().listen((s) => setState(() => members = {for (final m in s.docs) m.id: '${m.data()['displayName']}'}), onError: (_) {});
+    _sync = col(P.inventory).snapshots(includeMetadataChanges: true).listen((s) {
+      final p = s.metadata.hasPendingWrites, fresh = !s.metadata.isFromCache && !p;
+      if (mounted) setState(() { pending = p; if (fresh) lastSync = DateTime.now(); });
+    }, onError: (_) {});
+    isOnline().then((o) { if (mounted) setState(() => offline = !o); });
+    _net = Connectivity().onConnectivityChanged.listen((dynamic r) {
+      final off = r is List ? r.every((x) => x == ConnectivityResult.none) : r == ConnectivityResult.none;
+      if (mounted) setState(() => offline = off);
+    });
+    _tm = Timer.periodic(const Duration(seconds: 30), (_) { if (mounted) setState(() {}); });
+  }
+
+  String rel(DateTime t) {
+    final m = DateTime.now().difference(t).inMinutes;
+    return m < 1 ? 'just now' : m < 60 ? '$m minutes ago' : '${m ~/ 60} hours ago';
+  }
+
+  Widget status() {
+    final last = lastSync == null ? '' : ' · last sync ${rel(lastSync!)}';
+    if (offline) return Text('No network$last', style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 12));
+    return Text(pending ? 'Syncing' : lastSync == null ? 'Connecting…' : 'Synced ${rel(lastSync!)}', style: const TextStyle(fontSize: 12));
   }
 
   @override
-  void dispose() { _sub?.cancel(); super.dispose(); }
+  void dispose() { _sub?.cancel(); _sync?.cancel(); _net?.cancel(); _tm?.cancel(); super.dispose(); }
 
   Future<void> edWho(Doc d) async {
     final pick = await showDialog<String>(
@@ -173,7 +199,7 @@ class _ListState extends State<ListScreen> {
   Future<void> buy(Doc d) async {
     final qn = d['quantity'] as int, src = d.data();
     final v = await form(context, 'Moving the product(s) to the inventory list',
-        [F('n', 'Name', init: d['name']), F('q', 'Quantity to move', init: '$qn', kind: 'num'), const F('d', 'Expiration date', kind: 'date'), const F('s', 'All products have the same exp. date', init: '1', kind: 'check')],
+        [F('n', 'Name', init: d['name']), F('q', 'Quantity to move', init: '$qn', kind: 'num'), F('d', 'Expiration date', init: '${DateTime.now().year}.', kind: 'date'), const F('s', 'All products have the same exp. date', init: '1', kind: 'check')],
         ok: 'Move',
         check: (m) { final x = int.tryParse(m['q']!); return checkField('name', m['n']!) ?? (x == null || x < 1 || x > qn ? 'Quantity: 1–$qn.' : null) ?? (m['s'] == '1' || x == 1 ? checkField('expiresOn', m['d']!) : null); });
     if (v == null) return;
@@ -189,7 +215,7 @@ class _ListState extends State<ListScreen> {
     var left = qn;
     for (var i = 1; i <= mv; i++) {
       if (!mounted) return;
-      final p = await form(context, '$n - $i', [const F('d', 'Expiration date', kind: 'date')], check: (m) => checkField('expiresOn', m['d']!));
+      final p = await form(context, '$n - $i', [F('d', 'Expiration date', init: '${DateTime.now().year}.', kind: 'date')], check: (m) => checkField('expiresOn', m['d']!));
       if (p == null) return;
       left--;
       final b = db.batch();
@@ -302,6 +328,7 @@ class _ListState extends State<ListScreen> {
                   segments: const [ButtonSegment(value: 0, label: Text('Inventory list')), ButtonSegment(value: 1, label: Text('Shopping list'))],
                   selected: {tab},
                   onSelectionChanged: (s) => setState(() { tab = s.first; q = ''; find = false; })),
+              Align(alignment: Alignment.centerLeft, child: Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: status())),
               Row(children: [
                 Expanded(child: FilledButton(onPressed: tab == 0 ? addInv : addShop, child: const Text('Add'))),
                 const SizedBox(width: 8),

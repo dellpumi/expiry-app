@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../common.dart';
 import '../firestore_paths.dart';
 import '../net.dart';
@@ -31,9 +32,21 @@ class _EdState extends State<EditorsScreen> {
     final e = v['e']!.trim().toLowerCase();
     if (e == me.email!.toLowerCase()) return snack('You are the owner.');
     if (mem.any((m) => '${m.data()['email']}' == e) || inv.any((i) => i.id == e)) return snack('Already a member or invited.');
+    try {
+      if (!(await db.doc('userEmails/$e').get()).exists) {
+        if (!mounted) return;
+        await showDialog(context: context, builder: (k) => AlertDialog(title: const Text('No account yet'), content: Text('$e has no account yet. The person must first register in the app and verify the e-mail address. Then invite them again.'), actions: [TextButton(onPressed: () => Navigator.pop(k), child: const Text('OK'))]));
+        return;
+      }
+    } catch (_) { return snack(S.generic); }
     db.doc('${P.list(id)}/${P.invites}/$e').set({'email': e, 'listId': id, 'listName': listName, 'ownerName': me.displayName ?? '?', 'invitedByUid': me.uid,
       'createdAt': FieldValue.serverTimestamp(), 'expiresAt': Timestamp.fromDate(DateTime.now().add(const Duration(days: 14)))}).catchError((_) => snack(S.generic));
-    snack('Invitation saved. Ask $e to register or log in with exactly this address, then tap Accept.');
+    if (!mounted) return;
+    final send = await confirm(context, 'Invitation saved', 'The invitation now waits in the app of $e. No e-mail is sent automatically. Send them an e-mail now to tell them?', ok: 'Send e-mail');
+    if (!send) return;
+    final subj = 'Invitation to the list "$listName"';
+    final body = 'Hello! I invited you to my shared list "$listName" in the Expiry tracker & shopping list app. Open the app, log in with exactly this e-mail address ($e) and tap Accept on the invitation. The invitation is valid for 14 days.';
+    try { await launchUrl(Uri.parse('mailto:$e?subject=${Uri.encodeComponent(subj)}&body=${Uri.encodeComponent(body)}'), mode: LaunchMode.externalApplication); } catch (_) { snack(S.generic); }
   }
 
   Future<void> saveRemove() async {

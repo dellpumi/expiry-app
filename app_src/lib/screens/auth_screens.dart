@@ -43,6 +43,10 @@ Future<void> askLogout(BuildContext c) async {
 /// Creates users/{uid} if missing (spec §5 ensureUserDoc).
 Future<void> ensureUserDoc(User u) async {
   final ref = FirebaseFirestore.instance.doc(P.user(u.uid));
+  try {
+    final er = FirebaseFirestore.instance.doc('userEmails/${u.email!.toLowerCase()}');
+    if (!(await er.get()).exists) await er.set({'uid': u.uid});
+  } catch (_) {}
   if ((await ref.get()).exists) return;
   await ref.set({'email': u.email!.toLowerCase(), 'displayName': u.displayName ?? '', 'defaultListId': null, 'createdAt': FieldValue.serverTimestamp()});
 }
@@ -54,7 +58,7 @@ class StartScreen extends StatelessWidget {
     Navigator.push(c, MaterialPageRoute(builder: (_) => AuthForm(mode: m)));
   }
   @override
-  Widget build(BuildContext c) => ExitGuard(child: _page('Inventory & Shopping', [
+  Widget build(BuildContext c) => ExitGuard(child: _page('Expiry tracker & shopping list', [
         FilledButton(onPressed: () => _go(c, 'register'), child: const Text('Register')),
         const SizedBox(height: 8),
         OutlinedButton(onPressed: () => _go(c, 'login'), child: const Text('Login')),
