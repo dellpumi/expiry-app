@@ -57,7 +57,7 @@ class F {
 Future<Map<String, String>?> form(BuildContext c, String title, List<F> fs,
     {String ok = 'Save', String cancel = 'Cancel', String? text, String? Function(Map<String, String>)? check,
     Future<void> Function(Map<String, String>)? onSave, Map<String, String> clear = const {}}) {
-  final ctl = {for (final f in fs) f.id: TextEditingController(text: f.init)};
+  final ctl = {for (final f in fs) f.id: TextEditingController(text: f.init)..selection = TextSelection.collapsed(offset: f.init.length)};
   final chk = {for (final f in fs) f.id: f.init == '1'};
   final shown = <String>{};
   var err = '';

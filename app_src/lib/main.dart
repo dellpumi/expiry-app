@@ -21,7 +21,7 @@ class App extends StatelessWidget {
   const App({super.key});
   @override
   Widget build(BuildContext context) => MaterialApp(
-        title: 'Inventory & Shopping',
+        title: 'Expiry tracker & shopping list',
         theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2E5E3A), brightness: Brightness.dark), useMaterial3: true),
         navigatorKey: navKey,
         home: const SessionWatcher(child: Gate()),
