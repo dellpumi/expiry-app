@@ -1,4 +1,4 @@
-name: Build Android APK file manually
+name: Android APK
 
 on:
   workflow_dispatch:
@@ -30,7 +30,7 @@ jobs:
 
       - name: Add Firebase and other packages
         working-directory: build_app
-        run: flutter pub add firebase_core firebase_auth cloud_firestore connectivity_plus
+        run: flutter pub add firebase_core firebase_auth cloud_firestore connectivity_plus url_launcher
 
       - name: Set the minimum Android version to 24
         working-directory: build_app
