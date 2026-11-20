@@ -30,7 +30,7 @@ jobs:
 
       - name: Add Firebase and other packages
         working-directory: build_app
-        run: flutter pub add firebase_core firebase_auth cloud_firestore connectivity_plus
+        run: flutter pub add firebase_core firebase_auth cloud_firestore connectivity_plus shared_preferences timezone url_launcher flutter_local_notifications:19.5.0
 
       - name: Enable desugaring and notification permissions
         working-directory: build_app
