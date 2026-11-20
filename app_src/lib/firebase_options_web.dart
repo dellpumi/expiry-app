@@ -3,10 +3,10 @@ import 'package:firebase_core/firebase_core.dart';
 /// Values of the Firebase WEB app (see PHASE5B.md, step 1). Used only by the web build.
 class WebFirebaseOptions {
   static const options = FirebaseOptions(
-    apiKey: 'PASTE_WEB_apiKey_HERE',
-    appId: 'PASTE_WEB_appId_HERE',
-    messagingSenderId: 'PASTE_WEB_messagingSenderId_HERE',
-    projectId: 'PASTE_WEB_projectId_HERE',
-    authDomain: 'PASTE_WEB_authDomain_HERE',
+    apiKey: 'AIzaSyC3K6WGNrNEzky8iSxu0dPx1P3a4z79Fps',
+    appId: '1:976148621725:web:6a69977d178b996ebc6774',
+    messagingSenderId: '976148621725',
+    projectId: 'expiry-tracker-92c0c',
+    authDomain: 'expiry-tracker-92c0c.firebaseapp.com',
   );
 }
