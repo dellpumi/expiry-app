@@ -2,16 +2,18 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'firebase_options_web.dart';
 import 'firebase_options.dart';
 import 'screens/auth_screens.dart';
 import 'screens/hub_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await Firebase.initializeApp(options: kIsWeb ? WebFirebaseOptions.options : DefaultFirebaseOptions.currentPlatform);
   FirebaseFirestore.instance.settings =
-      const Settings(persistenceEnabled: true, cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED);
+      const Settings(persistenceEnabled: !kIsWeb, cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED);
   runApp(const App());
 }
 

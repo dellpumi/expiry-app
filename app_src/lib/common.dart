@@ -101,11 +101,11 @@ Future<Map<String, String>?> form(BuildContext c, String title, List<F> fs,
           }));
 }
 
-Future<bool> confirm(BuildContext c, String title, String text, {String ok = 'Yes'}) async =>
+Future<bool> confirm(BuildContext c, String title, String text, {String ok = 'Yes', String cancel = 'Cancel'}) async =>
     (await showDialog<bool>(
         context: c,
         builder: (k) => AlertDialog(title: Text(title), content: Text(text), actions: [
-              TextButton(onPressed: () => Navigator.pop(k, false), child: const Text('Cancel')),
+              TextButton(onPressed: () => Navigator.pop(k, false), child: Text(cancel)),
               FilledButton(onPressed: () => Navigator.pop(k, true), child: Text(ok)),
             ]))) ??
     false;
