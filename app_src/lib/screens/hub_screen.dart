@@ -7,6 +7,7 @@ import '../net.dart';
 import '../strings.dart';
 import '../validators.dart';
 import 'auth_screens.dart';
+import '../reminders.dart';
 import 'list_screen.dart';
 import 'settings_screen.dart';
 
@@ -21,7 +22,17 @@ class _HubState extends State<HubScreen> {
   User get _me => FirebaseAuth.instance.currentUser!;
 
   @override
-  void initState() { super.initState(); ensureUserDoc(_me); }
+  void initState() { super.initState(); ensureUserDoc(_me).then((_) => _openDefault());
+    Reminders.start(_me.uid);
+  }
+
+  Future<void> _openDefault() async {
+    try {
+      final id = (await _db.doc(P.user(_me.uid)).get()).data()?['defaultListId'] as String?;
+      if (id == null || !mounted || !(await _db.doc(P.member(id, _me.uid)).get()).exists || !mounted) return;
+      Navigator.push(context, MaterialPageRoute(builder: (_) => ListScreen(listId: id)));
+    } catch (_) {}
+  }
 
   void _soon(String what) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$what: next build phase')));
 
@@ -69,6 +80,8 @@ class _HubState extends State<HubScreen> {
     final b = _db.batch(), x = d.data();
     if (yes) {
       b.set(_db.doc(P.member(x['listId'], _me.uid)), {'uid': _me.uid, 'listId': x['listId'], 'role': 'editor', 'displayName': _me.displayName ?? '?', 'email': _me.email!.toLowerCase(), 'joinedAt': FieldValue.serverTimestamp()});
+      b.set(_db.collection('users/${x['invitedByUid']}/notices').doc(), {'type': 'inviteAccepted', 'listId': x['listId'], 'listName': x['listName'],
+        'text': '${_me.displayName ?? '?'} (${_me.email}) accepted your invitation to "${x['listName']}".', 'fromUid': _me.uid, 'createdAt': FieldValue.serverTimestamp()});
     }
     b.delete(d.reference);
     try { await b.commit(); } catch (_) {

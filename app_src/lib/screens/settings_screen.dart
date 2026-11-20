@@ -6,6 +6,8 @@ import '../firestore_paths.dart';
 import '../net.dart';
 import '../strings.dart';
 import '../validators.dart';
+import '../prefs.dart';
+import '../reminders.dart';
 import 'auth_screens.dart';
 import 'editors_screen.dart';
 
@@ -17,6 +19,44 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SetState extends State<SettingsScreen> {
+  List<String> times = ['10:00', '16:45'];
+  @override
+  void initState() { super.initState(); Reminders.getTimes().then((t) { if (mounted) setState(() => times = t); }); }
+
+  Future<void> pickTime(int i) async {
+    final c = times[i].split(':');
+    final t = await showTimePicker(context: context, initialTime: TimeOfDay(hour: int.parse(c[0]), minute: int.parse(c[1])));
+    if (t == null) return;
+    final v = '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+    await Reminders.setTime(i, v);
+    if (mounted) setState(() => times[i] = v);
+  }
+
+  Future<void> pickDefault() async {
+    final ms = await db.collectionGroup(P.members).where('uid', isEqualTo: me.uid).get();
+    final names = <String, String>{};
+    for (final m in ms.docs) {
+      final id = '${m.data()['listId']}';
+      names[id] = '${(await db.doc(P.list(id)).get()).data()?['friendlyName'] ?? id}';
+    }
+    if (!mounted) return;
+    final pick = await showDialog<String>(context: context, builder: (k) => SimpleDialog(title: const Text('Default list'), children: [
+          SimpleDialogOption(onPressed: () => Navigator.pop(k, ''), child: const Text('(none – open the Hub)')),
+          for (final e in names.entries) SimpleDialogOption(onPressed: () => Navigator.pop(k, e.key), child: Text(e.value)),
+        ]));
+    if (pick == null) return;
+    db.doc(P.user(me.uid)).update({'defaultListId': pick.isEmpty ? null : pick}).catchError((_) => snack(S.generic));
+  }
+
+  Future<void> pickFont() async {
+    final v = await showDialog<double>(context: context, builder: (k) => SimpleDialog(title: const Text('Font size'), children: [
+          SimpleDialogOption(onPressed: () => Navigator.pop(k, 0.9), child: const Text('small')),
+          SimpleDialogOption(onPressed: () => Navigator.pop(k, 1.0), child: const Text('normal')),
+          SimpleDialogOption(onPressed: () => Navigator.pop(k, 1.2), child: const Text('larger')),
+        ]));
+    if (v != null) await setFont(v);
+  }
+
   final db = FirebaseFirestore.instance;
   User get me => FirebaseAuth.instance.currentUser!;
   void snack(String m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m), persist: false));
@@ -152,6 +192,10 @@ class _SetState extends State<SettingsScreen> {
                         }),
                   if (l != null && l['sharingEnabled'] == true)
                     ListTile(title: const Text('Editors of the list (tap to open)'), onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => EditorsScreen(listId: id!)))),
+                  ListTile(title: const Text('Default list'), onTap: pickDefault),
+                  ListTile(title: const Text('Font size'), onTap: pickFont),
+                  ListTile(title: const Text('Reminder 1: 1 day before expiry'), subtitle: Text(times[0]), onTap: () => pickTime(0)),
+                  ListTile(title: const Text('Reminder 2: 1 day before expiry'), subtitle: Text('${times[1]}  (00:00 skips a reminder)'), onTap: () => pickTime(1)),
                   ListTile(title: const Text('Change password'), onTap: chPw),
                   ListTile(title: const Text('Change display name'), subtitle: Text(me.displayName ?? ''), onTap: chName),
                   ListTile(title: const Text('Logout'), onTap: () => askLogout(c)),
