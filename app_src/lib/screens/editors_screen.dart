@@ -27,7 +27,7 @@ class _EdState extends State<EditorsScreen> {
 
   Future<void> add(String listName, List<_D> mem, List<_D> inv) async {
     if (!await requireOnline(context)) return;
-    final v = await form(context, 'Add editor', [const F('e', 'E-mail address')], check: (m) => checkEmail(m['e']!.trim().toLowerCase()));
+    final v = await form(context, 'Add editor', [const F('e', 'E-mail address')], cancel: 'Close', check: (m) => checkEmail(m['e']!.trim().toLowerCase()));
     if (v == null) return;
     final e = v['e']!.trim().toLowerCase();
     if (e == me.email!.toLowerCase()) return snack('You are the owner.');
@@ -35,14 +35,19 @@ class _EdState extends State<EditorsScreen> {
     try {
       if (!(await db.doc('userEmails/$e').get()).exists) {
         if (!mounted) return;
-        await showDialog(context: context, builder: (k) => AlertDialog(title: const Text('No account yet'), content: Text('$e has no account yet. The person must first register in the app and verify the e-mail address. Then invite them again.'), actions: [TextButton(onPressed: () => Navigator.pop(k), child: const Text('OK'))]));
-        return;
+        final go = await showDialog<bool>(
+            context: context,
+            builder: (k) => AlertDialog(title: const Text('No account found'), content: Text('No account was found for $e. The person must register in the app first (and verify the e-mail address). If you know they already did, you can invite anyway.'), actions: [
+                  TextButton(onPressed: () => Navigator.pop(k, false), child: const Text('Close')),
+                  FilledButton(onPressed: () => Navigator.pop(k, true), child: const Text('Invite anyway')),
+                ]));
+        if (go != true) return;
       }
     } catch (_) { return snack(S.generic); }
     db.doc('${P.list(id)}/${P.invites}/$e').set({'email': e, 'listId': id, 'listName': listName, 'ownerName': me.displayName ?? '?', 'invitedByUid': me.uid,
       'createdAt': FieldValue.serverTimestamp(), 'expiresAt': Timestamp.fromDate(DateTime.now().add(const Duration(days: 14)))}).catchError((_) => snack(S.generic));
     if (!mounted) return;
-    final send = await confirm(context, 'Invitation saved', 'The invitation now waits in the app of $e. No e-mail is sent automatically. Send them an e-mail now to tell them?', ok: 'Send e-mail');
+    final send = await confirm(context, 'Invitation saved', 'The invitation now waits in the app of $e. No e-mail is sent automatically. Send them an e-mail now to tell them?', ok: 'Send e-mail', cancel: 'Close');
     if (!send) return;
     final subj = 'Invitation to the list "$listName"';
     final body = 'Hello! I invited you to my shared list "$listName" in the Expiry tracker & shopping list app. Open the app, log in with exactly this e-mail address ($e) and tap Accept on the invitation. The invitation is valid for 14 days.';

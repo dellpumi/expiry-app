@@ -91,6 +91,7 @@ class _AuthFormState extends State<AuthForm> {
     try {
       if (m == 'register') {
         final cred = await _auth.createUserWithEmailAndPassword(email: e, password: p);
+        FirebaseFirestore.instance.doc('userEmails/$e').set({'uid': cred.user!.uid}).catchError((_) {});
         await cred.user!.updateDisplayName(n);
         await cred.user!.sendEmailVerification();
       } else if (m == 'login') {

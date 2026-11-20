@@ -105,16 +105,17 @@ class _SetState extends State<SettingsScreen> {
 
   Future<void> delList(String id) async {
     if (!await requireOnline(context) || !await confirm(context, 'Delete list', 'Delete this list for everyone? All its items are lost.', ok: 'Delete')) return;
-    final nav = Navigator.of(context);
+    final nav = Navigator.of(context), sm = ScaffoldMessenger.of(context);
     try { await wipeList(id); } catch (_) { snack(S.generic); return; }
     nav.popUntil((r) => r.isFirst);
+    sm.showSnackBar(const SnackBar(content: Text('The list got successfully deleted.'), persist: false));
   }
 
   Future<void> delAccount() async {
     if (!await requireOnline(context) || !await confirm(context, 'Delete account', 'Delete your account? Lists you own are deleted for everyone.', ok: 'Continue')) return;
     final v = await form(context, 'Password', [const F('p', 'Enter your password to continue.', kind: 'pw')], ok: 'Delete');
     if (v == null) return;
-    final nav = Navigator.of(context);
+    final nav = Navigator.of(context), sm = ScaffoldMessenger.of(context);
     try {
       await me.reauthenticateWithCredential(EmailAuthProvider.credential(email: me.email!, password: v['p']!));
       final ms = await db.collectionGroup(P.members).where('uid', isEqualTo: me.uid).get();
@@ -123,6 +124,7 @@ class _SetState extends State<SettingsScreen> {
       try { await db.doc('userEmails/${me.email!.toLowerCase()}').delete(); } catch (_) {}
       await me.delete();
       nav.popUntil((r) => r.isFirst);
+      sm.showSnackBar(const SnackBar(content: Text('Your account, list(s) got successfully deleted.'), persist: false));
     } on FirebaseAuthException { snack('Wrong password.'); } catch (_) { snack(S.generic); }
   }
 
