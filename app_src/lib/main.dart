@@ -5,6 +5,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'firebase_options_web.dart';
+import 'prefs.dart';
+import 'reminders.dart';
 import 'firebase_options.dart';
 import 'screens/auth_screens.dart';
 import 'screens/hub_screen.dart';
@@ -14,6 +16,7 @@ Future<void> main() async {
   await Firebase.initializeApp(options: kIsWeb ? WebFirebaseOptions.options : DefaultFirebaseOptions.currentPlatform);
   FirebaseFirestore.instance.settings =
       const Settings(persistenceEnabled: !kIsWeb, cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED);
+  await loadPrefs();
   runApp(const App());
 }
 
@@ -26,6 +29,7 @@ class App extends StatelessWidget {
         title: 'Expiry tracker & shopping list',
         theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2E5E3A), brightness: Brightness.dark), useMaterial3: true),
         navigatorKey: navKey,
+        builder: (c, w) => ValueListenableBuilder<double>(valueListenable: fontScale, builder: (c, v, _) => MediaQuery(data: MediaQuery.of(c).copyWith(textScaler: TextScaler.linear(v)), child: w!)),
         home: const SessionWatcher(child: Gate()),
       );
 }
@@ -69,6 +73,7 @@ class Gate extends StatelessWidget {
         stream: FirebaseAuth.instance.userChanges(),
         builder: (c, s) {
           final u = s.data ?? FirebaseAuth.instance.currentUser;
+          if (u == null) Reminders.stop();
           if (u == null) return s.connectionState == ConnectionState.waiting ? const Scaffold(body: Center(child: CircularProgressIndicator())) : const StartScreen();
           if (!u.emailVerified) return const VerifyScreen();
           return const HubScreen();
