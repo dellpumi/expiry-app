@@ -29,7 +29,7 @@ jobs:
 
       - name: Add packages
         working-directory: build_web
-        run: flutter pub add firebase_core firebase_auth cloud_firestore connectivity_plus url_launcher
+        run: flutter pub add firebase_core firebase_auth cloud_firestore connectivity_plus url_launcher shared_preferences
 
       - name: Build the web app
         working-directory: build_web
