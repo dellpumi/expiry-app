@@ -1,0 +1,53 @@
+name: Web build (GitHub Pages)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    name: Build web app
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get the code
+        uses: actions/checkout@v7
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Create the web project and add our code
+        run: |
+          flutter create --org hu --project-name expiry_app --platforms=web build_web
+          cp -R app_src/lib/. build_web/lib/
+
+      - name: Add packages
+        working-directory: build_web
+        run: flutter pub add firebase_core firebase_auth cloud_firestore connectivity_plus url_launcher
+
+      - name: Build the web app
+        working-directory: build_web
+        run: flutter build web --release --base-href "/${{ github.event.repository.name }}/"
+
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build_web/build/web
+
+  deploy:
+    name: Publish
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
