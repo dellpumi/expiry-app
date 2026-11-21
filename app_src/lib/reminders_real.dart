@@ -20,6 +20,7 @@ class Reminders {
     tzd.initializeTimeZones();
     await _p.initialize(const InitializationSettings(android: AndroidInitializationSettings('@mipmap/ic_launcher')));
     await _p.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.requestNotificationsPermission();
+    await _p.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.requestExactAlarmsPermission();
     _ready = true;
   }
 
@@ -71,7 +72,12 @@ class Reminders {
     Future<void> add(DateTime at, Map<String, dynamic> i, String text) async {
       if (!at.isAfter(now) || n >= 400) return;
       n++;
-      await _p.zonedSchedule(n, 'Expiry reminder', '"${i['name']} -- ${i['quantity']} db" $text', tz.TZDateTime.from(at, tz.UTC), _d, androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle);
+      final when = tz.TZDateTime.from(at, tz.UTC), body = '"${i['name']} -- ${i['quantity']} db" $text';
+      try {
+        await _p.zonedSchedule(n, 'Expiry reminder', body, when, _d, androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle);
+      } catch (_) {
+        await _p.zonedSchedule(n, 'Expiry reminder', body, when, _d, androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle);
+      }
     }
     for (final items in _items.values) {
       for (final i in items) {

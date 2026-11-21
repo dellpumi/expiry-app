@@ -15,7 +15,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: kIsWeb ? WebFirebaseOptions.options : DefaultFirebaseOptions.currentPlatform);
   FirebaseFirestore.instance.settings =
-      const Settings(persistenceEnabled: !kIsWeb, cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED);
+      const Settings(persistenceEnabled: !kIsWeb, webExperimentalAutoDetectLongPolling: true, cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED);
   await loadPrefs();
   runApp(const App());
 }
@@ -29,6 +29,7 @@ class App extends StatelessWidget {
         title: 'Expiry tracker & shopping list',
         theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2E5E3A), brightness: Brightness.dark), useMaterial3: true),
         navigatorKey: navKey,
+        scaffoldMessengerKey: messengerKey,
         builder: (c, w) => ValueListenableBuilder<double>(valueListenable: fontScale, builder: (c, v, _) => MediaQuery(data: MediaQuery.of(c).copyWith(textScaler: TextScaler.linear(v)), child: w!)),
         home: const SessionWatcher(child: Gate()),
       );
@@ -49,7 +50,12 @@ class _SwState extends State<SessionWatcher> with WidgetsBindingObserver {
   @override
   void dispose() { _t?.cancel(); WidgetsBinding.instance.removeObserver(this); super.dispose(); }
   @override
-  void didChangeAppLifecycleState(AppLifecycleState s) { if (s == AppLifecycleState.resumed) _check(); }
+  void didChangeAppLifecycleState(AppLifecycleState s) {
+    if (s == AppLifecycleState.resumed) {
+      _check();
+      if (kIsWeb) { FirebaseFirestore.instance.disableNetwork().then((_) => FirebaseFirestore.instance.enableNetwork()); }
+    }
+  }
   Future<void> _check() async {
     final u = FirebaseAuth.instance.currentUser;
     if (u == null) return;
