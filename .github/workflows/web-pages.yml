@@ -27,6 +27,11 @@ jobs:
           flutter create --org hu --project-name expiry_app --platforms=web build_web
           cp -R app_src/lib/. build_web/lib/
 
+      - name: Set the web app name
+        working-directory: build_web
+        run: |
+          perl -pi -e 's/<title>[^<]*<\/title>/<title>Expiry tracker<\/title>/; s/(apple-mobile-web-app-title" content=")[^"]*/${1}Expiry tracker/' web/index.html
+
       - name: Add packages
         working-directory: build_web
         run: flutter pub add firebase_core firebase_auth cloud_firestore connectivity_plus url_launcher shared_preferences
