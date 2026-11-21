@@ -30,14 +30,19 @@ jobs:
 
       - name: Add Firebase and other packages
         working-directory: build_app
-        run: flutter pub add firebase_core firebase_auth cloud_firestore connectivity_plus shared_preferences timezone url_launcher flutter_local_notifications:19.5.0
+        run: flutter pub add firebase_core firebase_auth cloud_firestore connectivity_plus
 
       - name: Enable desugaring and notification permissions
         working-directory: build_app
         run: |
           perl -0pi -e 's/compileOptions \{/compileOptions {\n        isCoreLibraryDesugaringEnabled = true/' android/app/build.gradle.kts
           printf '\ndependencies {\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")\n}\n' >> android/app/build.gradle.kts
-          perl -0pi -e 's#<application#<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>\n    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>\n    <application#; s#</application>#    <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"/>\n        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">\n            <intent-filter>\n                <action android:name="android.intent.action.BOOT_COMPLETED"/>\n            </intent-filter>\n        </receiver>\n    </application>#' android/app/src/main/AndroidManifest.xml
+          perl -0pi -e 's#<application#<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>\n    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>\n    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>\n    <application#; s#</application>#    <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"/>\n        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">\n            <intent-filter>\n                <action android:name="android.intent.action.BOOT_COMPLETED"/>\n            </intent-filter>\n        </receiver>\n    </application>#' android/app/src/main/AndroidManifest.xml
+
+      - name: Set the app name
+        working-directory: build_app
+        run: |
+          perl -pi -e 's/android:label="[^"]*"/android:label="Product expiry &amp; shopping list tracker"/' android/app/src/main/AndroidManifest.xml
 
       - name: Set the minimum Android version to 24
         working-directory: build_app
