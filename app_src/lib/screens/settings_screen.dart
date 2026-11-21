@@ -202,6 +202,7 @@ class _SetState extends State<SettingsScreen> {
                   if (l != null && !own) ListTile(title: const Text('Leave list'), onTap: () => leave(id!)),
                   if (l != null && own) ListTile(title: const Text('Delete list'), onTap: () => delList(id!)),
                   ListTile(title: const Text('Delete account'), onTap: delAccount),
+                  const Padding(padding: EdgeInsets.all(16), child: Center(child: Text('ver. 1.0 – 2026.11.21', style: TextStyle(color: Colors.white54)))),
                 ]);
               })),
     );
