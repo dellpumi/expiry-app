@@ -50,7 +50,8 @@ Map<String, dynamic> createdFields() => {...stampFields(), 'createdAt': FieldVal
 
 class F {
   final String id, label, init, kind; // kind: text | num | date | check
-  const F(this.id, this.label, {this.init = '', this.kind = 'text'});
+  final List<(String, String)> opts;
+  const F(this.id, this.label, {this.init = '', this.kind = 'text', this.opts = const []});
 }
 
 /// One reusable dialog. Returns the values, or null on cancel. With onSave the dialog stays open and clears the fields in [clear].
@@ -59,19 +60,22 @@ Future<Map<String, String>?> form(BuildContext c, String title, List<F> fs,
     Future<void> Function(Map<String, String>)? onSave, Map<String, String> clear = const {}}) {
   final ctl = {for (final f in fs) f.id: TextEditingController(text: f.init)..selection = TextSelection.collapsed(offset: f.init.length)};
   final chk = {for (final f in fs) f.id: f.init == '1'};
+  final sel = {for (final f in fs) f.id: f.init};
   final shown = <String>{};
   var err = '';
   return showDialog<Map<String, String>>(
       context: c,
       builder: (_) => StatefulBuilder(builder: (c2, set) {
-            Map<String, String> vals() => {for (final f in fs) f.id: f.kind == 'check' ? (chk[f.id]! ? '1' : '0') : ctl[f.id]!.text};
+            Map<String, String> vals() => {for (final f in fs) f.id: f.kind == 'sel' ? sel[f.id]! : f.kind == 'check' ? (chk[f.id]! ? '1' : '0') : ctl[f.id]!.text};
             return AlertDialog(
               title: Text(title),
               content: SingleChildScrollView(
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
                 if (text != null) Text(text),
                 for (final f in fs)
-                  f.kind == 'check'
+                  f.kind == 'sel'
+                      ? DropdownButtonFormField<String>(value: sel[f.id], decoration: InputDecoration(labelText: f.label), items: [for (final o in f.opts) DropdownMenuItem(value: o.$1, child: Text(o.$2))], onChanged: (v) => set(() => sel[f.id] = v ?? ''))
+                      : f.kind == 'check'
                       ? CheckboxListTile(contentPadding: EdgeInsets.zero, title: Text(f.label), value: chk[f.id], onChanged: (v) => set(() => chk[f.id] = v!))
                       : TextField(
                           controller: ctl[f.id],
