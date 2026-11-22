@@ -160,14 +160,14 @@ class _ListState extends State<ListScreen> {
     b.commit();
   }
 
-  Map<String, dynamic> shopDoc(String n, int qn, String s, String p) =>
-      {'name': n, 'quantity': qn, 'assigneeUid': null, 'shop': normName(s), 'priceFt': p.isEmpty ? 0 : int.parse(p), ...createdFields()};
+  Map<String, dynamic> shopDoc(String n, int qn, String s, String p, {String? who}) =>
+      {'name': n, 'quantity': qn, 'assigneeUid': (who == null || who.isEmpty) ? null : who, 'shop': normName(s), 'priceFt': p.isEmpty ? 0 : int.parse(p), ...createdFields()};
 
   Future<void> addShop() => form(context, 'Add to the shopping list',
-      [const F('n', 'Name'), const F('q', 'Quantity', init: '1', kind: 'num'), const F('s', 'Shop name'), const F('p', 'Unit price (Ft)', kind: 'num')],
+      [const F('n', 'Name'), const F('q', 'Quantity', init: '1', kind: 'num'), const F('s', 'Shop name'), const F('p', 'Unit price (Ft)', kind: 'num'), if (multi) F('w', 'Who buys it', kind: 'sel', opts: [('', 'Anyone'), for (final e in members.entries) (e.key, e.value)])],
       cancel: 'Close', clear: {'n': '', 'q': '1', 's': '', 'p': ''},
       check: (m) => checkField('name', m['n']!) ?? checkField('quantity', m['q']!) ?? checkSP(m['s']!, m['p']!),
-      onSave: (m) async { col(P.shopping).doc().set(shopDoc(normName(m['n']!), int.parse(m['q']!), m['s']!, m['p']!)); });
+      onSave: (m) async { col(P.shopping).doc().set(shopDoc(normName(m['n']!), int.parse(m['q']!), m['s']!, m['p']!, who: m['w'])); });
 
   Future<void> editSP(Doc d) async {
     final p = d.data()['priceFt'] ?? 0;
@@ -226,15 +226,39 @@ class _ListState extends State<ListScreen> {
     if (mounted) snack('Moved to the inventory list');
   }
 
+  Future<void> clrShop() async {
+    final rows = (await col(P.shopping).get()).docs;
+    if (rows.isEmpty) { snack('The shopping list is empty.'); return; }
+    if (!mounted || !await confirm(context, 'Delete all products', 'Delete all ${rows.length} product(s) from the shopping list?', ok: 'Delete all') || !mounted) return;
+    final saved = [for (final d in rows) (d.id, d.data())];
+    for (var i = 0; i < rows.length; i += 200) {
+      final b = db.batch();
+      for (final d in rows.skip(i).take(200)) {
+        final x = d.data();
+        b.set(col(P.archive).doc(d.id), {'name': x['name'], 'quantity': x['quantity'], 'expiresOn': null, 'source': 'shopping', 'deletedByUid': me.uid, 'deletedByName': me.displayName ?? '?',
+          'deletedAt': FieldValue.serverTimestamp(), 'shop': x['shop'] ?? '', 'priceFt': x['priceFt'] ?? 0, 'assigneeUid': x['assigneeUid']});
+        b.delete(d.reference);
+      }
+      b.commit();
+    }
+    snack('All products removed from the shopping list', sec: 5, action: SnackBarAction(label: 'Undo', onPressed: () {
+      for (var i = 0; i < saved.length; i += 200) {
+        final u = db.batch();
+        for (final s in saved.skip(i).take(200)) { u.set(col(P.shopping).doc(s.$1), {...s.$2, ...stampFields()}); u.delete(col(P.archive).doc(s.$1)); }
+        u.commit();
+      }
+    }));
+  }
+
   Widget pc(int flex, Widget w) => Expanded(flex: flex, child: Padding(padding: const EdgeInsets.only(right: 8), child: w));
 
-  Widget head(List<(String, String, int)> cols, String cur, bool asc, void Function(String) tap, {double lead = 0, double trail = 48}) => Container(
+  Widget head(List<(String, String, int)> cols, String cur, bool asc, void Function(String) tap, {double lead = 0, double trail = 48, VoidCallback? onTrail}) => Container(
       color: Colors.white10,
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(children: [
         SizedBox(width: lead),
         for (final c in cols) pc(c.$3, InkWell(onTap: () => tap(c.$2), child: Text('${c.$1}${cur == c.$2 ? (asc ? ' ▲' : ' ▼') : ''}', style: const TextStyle(fontWeight: FontWeight.bold)))),
-        SizedBox(width: trail, child: const Align(alignment: Alignment.centerRight, child: Text('−'))),
+        SizedBox(width: trail, child: Align(alignment: Alignment.centerRight, child: SizedBox(width: 48, child: onTrail == null ? const Center(child: Icon(Icons.remove)) : IconButton(icon: const Icon(Icons.remove), onPressed: onTrail)))),
       ]));
 
   Widget inventory() => StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
@@ -247,7 +271,7 @@ class _ListState extends State<ListScreen> {
           return iAsc ? r : -r;
         });
         return Column(children: [
-          head([('Name', 'name', 5), ('Quantity', 'q', 2), ('Expiration date', 'exp', 3)], iSort, iAsc, (k) => setState(() { if (iSort == k) { iAsc = !iAsc; } else { iSort = k; iAsc = true; } })),
+          head([('Name', 'name', 5), ('Qty', 'q', 2), ('Expiration date', 'exp', 3)], iSort, iAsc, (k) => setState(() { if (iSort == k) { iAsc = !iAsc; } else { iSort = k; iAsc = true; } })),
           Expanded(child: ListView(children: [for (final d in rows) invRow(d)])),
         ]);
       });
@@ -288,7 +312,7 @@ class _ListState extends State<ListScreen> {
             const TextSpan(text: 'Sum of the product(s) on this list: '),
             TextSpan(text: '${thousands(sum)} Ft', style: const TextStyle(fontWeight: FontWeight.bold)),
           ])))),
-          head([('Name', 'name', 5), ('Quantity', 'q', 2), if (multi) ('Who', 'who', 3)], sSort, sAsc, (k) => setState(() { if (sSort == k) { sAsc = !sAsc; } else { sSort = k; sAsc = true; } }), lead: 36, trail: 104),
+          head([('Name', 'name', 5), ('Qty', 'q', 2), if (multi) ('Who', 'who', 3)], sSort, sAsc, (k) => setState(() { if (sSort == k) { sAsc = !sAsc; } else { sSort = k; sAsc = true; } }), lead: 36, trail: 104, onTrail: clrShop),
           Expanded(child: ListView(children: [for (final d in rows) shopRow(d, soon)])),
         ]);
       });
